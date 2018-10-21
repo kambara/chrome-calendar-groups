@@ -3,7 +3,7 @@
  * @namespace
  */
 var calendars = {};
-
+calendars['promise'] = {};
 
 /**
  * Shows a UI to request an OAuth token. This should only be called in response
@@ -91,6 +91,8 @@ calendars.updateSets = function(){
       var compareCalendars = {};
       var setsObj = _.filter(setsStorage, function(obj){return obj.selected === true;});
 
+      console.log(calendarsStorage)
+
       // new data and compare data
       _.each(calendarsStorage, function(calendar){
         console.log(setsObj[0]);
@@ -125,37 +127,24 @@ calendars.updateSets = function(){
       });
 
       // Change data
-      storage.local.putStorage(constants.storage.calendars, newStoredCalendars, function(){
+      storage.local.putStorage(constants.storage.calendars, newStoredCalendars, async function(){
         console.log("Starting API requests -------------------------");
-        async.each(compareCalendars, function(calendar, callback) {
-          _.defer(function(){
-            calendars.putCalendars(calendar, function(response){callback(response)});
-          });
-
-        }, function(error){
-
-          // if any of the file processing produced an error, err would equal that error
-          if( error ) {
-            // One of the iterations produced an error.
-            // All processing will now stop.
-             console.log('A request failed: ', error);
-             console.log('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++');
-          } else {
-
-            //Get currrent tab id then reload tab
-            chrome.tabs.query({active:true, windowType:"normal", currentWindow: true},function(d){
-              var tabId = d[0].id;
-              chrome.tabs.reload(tabId);
-              chrome.runtime.sendMessage({method: 'selection.sets.enable'});
-              chrome.runtime.sendMessage({method: 'ui.close'});
-            });
-
-            console.log('All requests were successful');
+        for (calendar of Object.values(compareCalendars)) {
+          await calendars.promise.putCalendars(calendar).catch(error => {
+            console.log('A request failed: ', error);
             console.log('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++');
-          }
+          })
+        }
+        //Get currrent tab id then reload tab
+        chrome.tabs.query({ active: true, windowType: "normal", currentWindow: true }, function (d) {
+          var tabId = d[0].id;
+          chrome.tabs.reload(tabId);
+          chrome.runtime.sendMessage({ method: 'selection.sets.enable' });
+          chrome.runtime.sendMessage({ method: 'ui.close' });
         });
+        console.log('All requests were successful');
+        console.log('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++');
       });
-
     });
   });
 };
@@ -195,6 +184,29 @@ calendars.putCalendars = function(calendarObj, callback){
   });
 };
 
+calendars.promise.putCalendars = (calendarObj) => {
+  return new Promise((resolve, reject) => {
+    var apiObj = JSON.stringify({
+      "selected": (calendarObj.selected)? true : false,
+      "colorId": (calendarObj.colorId)? calendarObj.colorId : 11
+    })
+    api.calendars.putList(calendarObj.id, apiObj, function(successResponse){
+      console.log('Successful Response:', successResponse);
+      resolve(null)
+    }, function(errorResponse){
+      console.log("Failed Response:", errorResponse)
+      reject(errorResponse)
+    })
+  })
+}
+
+calendars.promise.sleep = (mSec) => {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve()
+    }, mSec)
+  })
+}
 
 /**
  * Updates the 'minutes/hours/days until' visible badge from the events
