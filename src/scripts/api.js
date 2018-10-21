@@ -86,24 +86,37 @@ api.calendars.putList = function(calendarid, data, success, error){
       calendars.refreshUI();
       return;
     }
-
-    $.ajax({
-      type: 'PUT',
-      url: constants.CALENDAR_LIST_API_URL + '/' + encodeURIComponent(calendarid) + '?' + 'colorRgbFormat=false',
-      headers: {
-        'Authorization': 'Bearer ' + authToken
-      },
-      data: data,
-      dataType: 'json',
-      contentType: "application/json",
-      success: function(response) {
-        if(success) success(response);
-      },
-      error: function(response) {
-        if (response.status === 401) api.auth.deleteToken(calendars.refreshUI);
-        if(error) error(response);
-      }
-    });
+    let retryCount = 0
+    const request = () => {
+      $.ajax({
+        type: 'PUT',
+        url: constants.CALENDAR_LIST_API_URL + '/' + encodeURIComponent(calendarid) + '?' + 'colorRgbFormat=false',
+        headers: {
+          'Authorization': 'Bearer ' + authToken
+        },
+        data: data,
+        dataType: 'json',
+        contentType: "application/json",
+        timeout: retryCount * retryCount * 1000,
+        success: function(response) {
+          if(success) success(response);
+        },
+        error: function(response) {
+          if (response.status === 503) {
+            retryCount++
+            console.log('!!! retry !!!')
+            return request()
+          }
+          if (response.status === 401) {
+            api.auth.deleteToken(calendars.refreshUI);
+          }
+          if(error) {
+            error(response);
+          }
+        }
+      });
+    }
+    request()
   });
 };
 
